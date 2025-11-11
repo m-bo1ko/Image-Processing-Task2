@@ -24,11 +24,11 @@ $images_color = @{
     "impulse_noise" = "lenac_impulse2_small.bmp"
 }
 
-# ---- STEP 6: Non-linear filtration O6 (LL operator) ----
-Write-Host "`n===== STEP 6: LL Operator (O6) =====`n"
+# ---- STEP 5: Linear filtration S1 (Low-pass) ----
+Write-Host "`n===== STEP 5: Low-pass Filtering (S1) =====`n"
 foreach ($key in $images_gray.Keys) {
     $input = $images_gray[$key]
-    $output = "oll/" + $input + "_oll.bmp"
-    Write-Host "Applying LL operator on $input"
-    python main.py --oll -input="$input" -output="$output" -eps=1e-6
+    $output = "slowpass/" + $input + "_slowpass.bmp"
+    Write-Host "Applying low-pass filter on $input"
+    python main.py --slowpass -input="$input" -output="$output"
 }

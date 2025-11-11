@@ -484,7 +484,10 @@ def universal_convolution(img, kernel):
                         ny = min(max(y + ky - pad_h, 0), h - 1)
                         nx = min(max(x + kx - pad_w, 0), w - 1)
                         s += img[ny, nx, ch] * kernel[ky][kx]
-                result[y, x, ch] = s / ksum
+                if ksum != 0:
+                    result[y, x, ch] = s / ksum
+                else:
+                    result[y, x, ch] = s
     return result
 
 
@@ -705,7 +708,11 @@ Commands:
         result = hrayleigh(img, alpha)
 
     elif cmd == "--slowpass":
-        result = optimized_slowpass(img)
+        result = universal_convolution(img, [
+    [-1, 0, 1],
+    [-2, 0, 2],
+    [-1, 0, 1]
+])
 
     elif cmd == "--oll":
         eps = float(args.get("eps", 1e-6))
