@@ -298,6 +298,7 @@ def md(img1, img2):
 
 
 def compute_histogram(img, ch):
+    img = img.astype(np.float64)
     h, w, c = img.shape
     hist = [0] * 256
     for y in range(h):
@@ -309,10 +310,11 @@ def compute_histogram(img, ch):
 
 
 def cmean(img):
+    img = img.astype(np.float64)
     h, w, c = img.shape
     means = []
     for ch in range(c):
-        total = 0
+        total = 0.0
         for y in range(h):
             for x in range(w):
                 total += img[y, x, ch]
@@ -321,11 +323,13 @@ def cmean(img):
 
 
 def cvariance(img):
+    img = img.astype(np.float64)
     h, w, c = img.shape
     vars_ = []
+    means = cmean(img)
     for ch in range(c):
-        mean = cmean(img)[ch]
-        total = 0
+        mean = means[ch]
+        total = 0.0
         for y in range(h):
             for x in range(w):
                 diff = img[y, x, ch] - mean
@@ -335,11 +339,13 @@ def cvariance(img):
 
 
 def cstdev(img):
+    img = img.astype(np.float64)
     vars_ = cvariance(img)
     return [math.sqrt(v) for v in vars_]
 
 
 def cvarcoi(img):
+    img = img.astype(np.float64)
     means = cmean(img)
     stdevs = cstdev(img)
     result = []
@@ -349,6 +355,7 @@ def cvarcoi(img):
 
 
 def casyco(img):
+    img = img.astype(np.float64)
     h, w, c = img.shape
     asym = []
     means = cmean(img)
@@ -359,7 +366,7 @@ def casyco(img):
         if std == 0:
             asym.append(0)
             continue
-        total = 0
+        total = 0.0
         for y in range(h):
             for x in range(w):
                 total += ((img[y, x, ch] - mean) / std) ** 3
@@ -368,6 +375,7 @@ def casyco(img):
 
 
 def cflatco(img):
+    img = img.astype(np.float64)
     h, w, c = img.shape
     flat = []
     means = cmean(img)
@@ -378,7 +386,7 @@ def cflatco(img):
         if std == 0:
             flat.append(0)
             continue
-        total = 0
+        total = 0.0
         for y in range(h):
             for x in range(w):
                 total += ((img[y, x, ch] - mean) / std) ** 4
@@ -387,21 +395,25 @@ def cflatco(img):
 
 
 def cvarcoii(img):
-    means = cmean(img)
-    variances = cvariance(img)
+    img = img.astype(np.float64)
+    h, w, c = img.shape
     result = []
-    for m, v in zip(means, variances):
-        result.append(v / m if m != 0 else 0)
+    N = h * w
+    for ch in range(c):
+        hist = compute_histogram(img, ch)
+        s = sum(h*h for h in hist)
+        result.append((s) / (N * N))
     return result
 
 
 def centropy(img):
+    img = img.astype(np.float64)
     h, w, c = img.shape
     entropies = []
     for ch in range(c):
         hist = compute_histogram(img, ch)
         total = h * w
-        e = 0
+        e = 0.0
         for count in hist:
             if count > 0:
                 p = count / total
@@ -411,37 +423,34 @@ def centropy(img):
 
 
 def hrayleigh(img, alpha=50.0):
+    img = img.astype(np.float64)
     h, w, c = img.shape
     result = np.zeros((h, w, c), dtype=np.uint8)
     total = h * w
+
     for ch in range(c):
         hist = compute_histogram(img, ch)
-        pdf_emp = [x / total for x in hist]
-        cdf_emp, cum = [], 0
-        for p in pdf_emp:
-            cum += p
-            cdf_emp.append(cum)
-        rayleigh_cdf = [1 - math.exp(-(i**2)/(2*alpha*alpha)) for i in range(256)]
-        norm = rayleigh_cdf[-1] or 1
-        rayleigh_cdf = [x / norm for x in rayleigh_cdf]
-        mapping = [0] * 256
-        for i in range(256):
-            val = cdf_emp[i]
-            j = 1
-            while j < 256 and rayleigh_cdf[j] < val:
-                j += 1
-            low_rc = rayleigh_cdf[j - 1]
-            high_rc = rayleigh_cdf[j]
-            ratio = (val - low_rc) / (high_rc - low_rc) if high_rc != low_rc else 0
-            mapping[i] = (j - 1) + ratio
+        CDF = []
+        s = 0
+        for v in hist:
+            s += v
+            CDF.append(s/total)
+
+        mapping = []
+        for p in CDF:
+            if p >= 1: p = 0.999999
+            val = math.sqrt(-2 * alpha * alpha * math.log(1 - p))
+            mapping.append(min(255, max(0, int(val))))
+
         for y in range(h):
             for x in range(w):
-                v = int(img[y, x, ch])
-                result[y, x, ch] = np.clip(mapping[v], 0, 255)
+                result[y, x, ch] = mapping[int(img[y, x, ch])]
+
     return result
 
 
 def slowpass(img):
+    img = img.astype(np.float64)
     h, w, c = img.shape
     result = np.zeros((h, w, c), dtype=np.float32)
     kernel = [[1, 2, 1],
@@ -462,23 +471,24 @@ def slowpass(img):
 
 
 def oll(img, eps=1e-6):
+    img = img.astype(np.float64)
     h, w, c = img.shape
-    result = np.zeros((h, w, c), dtype=np.float32)
+    result = np.zeros((h, w, c), dtype=np.float64)
+
+    neighbors = [(-1,-1), (-1,1), (1,-1), (1,1)]
+
     for ch in range(c):
         for y in range(h):
             for x in range(w):
                 center = img[y, x, ch]
-                total = 0.0
-                count = 0
-                for ky in range(-1, 2):
-                    for kx in range(-1, 2):
-                        ny = y + ky
-                        nx = x + kx
-                        if 0 <= ny < h and 0 <= nx < w and not (ky == 0 and kx == 0):
-                            diff = abs(img[ny, nx, ch] - center)
-                            total += math.log(1 + diff + eps)
-                            count += 1
-                result[y, x, ch] = total / count if count > 0 else center
+                prod = center**4
+                for dy, dx in neighbors:
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < h and 0 <= nx < w:
+                        prod *= img[ny, nx, ch]
+                    else:
+                        prod *= center
+                result[y, x, ch] = 0.25 * abs(np.log(prod + eps))
     return result
 
 
